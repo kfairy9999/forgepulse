@@ -5,6 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     FORGEPULSE_HOST=0.0.0.0 \
     FORGEPULSE_PORT=8080 \
     FORGEPULSE_POLICY_PATH=/app/policies/default.yaml \
+    FORGEPULSE_DATABASE=/app/.data/forgepulse.sqlite \
     FORGEPULSE_ALLOW_UNSIGNED=false
 
 WORKDIR /app
@@ -12,11 +13,14 @@ WORKDIR /app
 COPY pyproject.toml README.md LICENSE /app/
 COPY src /app/src
 COPY policies /app/policies
+COPY migrations /app/migrations
 COPY demo/playground.html /app/demo/playground.html
 
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir . \
-    && useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser
+    && useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser \
+    && mkdir -p /app/.data \
+    && chown -R appuser:appuser /app/.data
 
 USER appuser
 EXPOSE 8080

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "forgepulse"
-version = "0.1.0"
-description = "Portable PR triage, CI failover, blast-radius, and policy for GitHub. Prototype with in-memory state."
+version = "0.2.0"
+description = "Portable PR triage, CI routing records, blast-radius, and policy for GitHub. Durable SQLite or Cloudflare D1 workspaces."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -26,6 +26,7 @@ dependencies = [
   "uvicorn[standard]>=0.32,<1",
   "pydantic>=2.8,<3",
   "pyyaml>=6.0,<7",
+  "cryptography>=43,<47",
 ]
 
 [project.optional-dependencies]
@@ -78,6 +79,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["E501"]
+"src/forgepulse/sqlite_store.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.10"

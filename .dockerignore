@@ -12,3 +12,6 @@ node_modules
 .wrangler
 tests
 docs
+.data
+*.sqlite
+master.key

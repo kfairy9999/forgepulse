@@ -17,7 +17,7 @@ jobs:
         python: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python }}
       - name: Install
@@ -30,3 +30,18 @@ jobs:
         run: python -m mypy --strict src
       - name: Pytest
         run: python -m pytest --cov=forgepulse --cov-fail-under=90
+
+  live-smoke:
+    name: live smoke
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: GET-only live checks
+        env:
+          FORGEPULSE_LIVE_URL: https://forgepulse.kfairley9999.workers.dev
+        run: python tests/test_live_smoke.py --get-only

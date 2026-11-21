@@ -1,14 +1,15 @@
 # ForgePulse playground Worker
 
-This folder is the free live demo at `https://forgepulse.kfairley9999.workers.dev`.
+This folder is the free live product at `https://forgepulse.kfairley9999.workers.dev`.
 
-It serves the same playground page and the triage, blast-radius, search, policy, and CI-queue endpoints against seeded fictional data. State is isolate-local and in-memory. There are no KV, D1, R2, or Durable Object bindings.
+It serves the playground and the workspace API against a Cloudflare D1 database (`forgepulse` / binding `DB`). Each visitor gets an isolated workspace. Secrets are wrapped with `FORGEPULSE_MASTER_KEY`, which is a Worker secret, not a file in this repo.
 
 ```bash
 npm install
-npm run dry-run
-# authenticated deploy:
-npm run deploy
+node build.mjs
+npx wrangler deploy --dry-run
+# authenticated deploy (Wrangler or the Cloudflare API):
+npx wrangler deploy
 ```
 
-The Python package in the repository root is the source of truth for tests and the Docker image. This Worker is a port of that logic for a free, always-on demo.
+The Python package in the repository root is the source of truth for tests, SQLite parity, and the Docker image. This Worker is the production-facing port of that API on the free Workers + D1 tier.

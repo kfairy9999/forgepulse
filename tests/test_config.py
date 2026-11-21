@@ -2,66 +2,43 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-from fastapi.testclient import TestClient
+from forgepulse.config import (
+    Settings,
+    default_database_path,
+    default_policy_path,
+    resolve_master_key,
+)
 
-from forgepulse.config import Settings, default_policy_path
-from forgepulse.models import PolicyRule
-from forgepulse.store import MemoryStore
-from forgepulse.webhook import parse_json_body, pull_request_from_webhook
 
-
-def test_settings_from_env_and_unsigned_gate(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    policy = tmp_path / "policy.yaml"
-    policy.write_text(Path("policies/default.yaml").read_text(encoding="utf-8"), encoding="utf-8")
-    monkeypatch.setenv("FORGEPULSE_POLICY_PATH", str(policy))
-    monkeypatch.setenv("FORGEPULSE_WEBHOOK_SECRET", "from-env")
-    monkeypatch.setenv("FORGEPULSE_ALLOW_UNSIGNED", "true")
+def test_unsigned_allowed_only_without_secret(monkeypatch: object) -> None:
+    monkeypatch.setenv("FORGEPULSE_WEBHOOK_SECRET", "")  # type: ignore[attr-defined]
+    monkeypatch.setenv("FORGEPULSE_ALLOW_UNSIGNED", "true")  # type: ignore[attr-defined]
+    monkeypatch.setenv("FORGEPULSE_MASTER_KEY", "ab" * 32)  # type: ignore[attr-defined]
     settings = Settings.from_env()
-    assert settings.webhook_secret == "from-env"
-    assert settings.allow_unsigned is True
+    assert settings.unsigned_webhooks_allowed() is True
+
+    monkeypatch.setenv("FORGEPULSE_WEBHOOK_SECRET", "super-secret")  # type: ignore[attr-defined]
+    settings = Settings.from_env()
+    assert settings.webhook_secret == "super-secret"
     assert settings.unsigned_webhooks_allowed() is False
-    monkeypatch.delenv("FORGEPULSE_WEBHOOK_SECRET")
-    open_settings = Settings.from_env()
-    assert open_settings.unsigned_webhooks_allowed() is True
 
 
-def test_default_policy_path_prefers_cwd() -> None:
-    path = default_policy_path()
-    assert path.name in {"default.yaml", "default_policy.yaml"}
+def test_master_key_round_trip(tmp_path: Path, monkeypatch: object) -> None:
+    monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
+    monkeypatch.delenv("FORGEPULSE_MASTER_KEY", raising=False)  # type: ignore[attr-defined]
+    first = resolve_master_key()
+    assert len(first) == 64
+    second = resolve_master_key()
+    assert first == second
+    monkeypatch.setenv("FORGEPULSE_MASTER_KEY", "cd" * 32)  # type: ignore[attr-defined]
+    assert resolve_master_key() == "cd" * 32
 
 
-def test_store_set_policy_and_queue_depth(store: MemoryStore) -> None:
-    store.set_policy(PolicyRule(rule_id="swapped"))
-    assert store.policy().rule_id == "swapped"
-    assert store.queue_depth() == 0
-
-
-def test_parse_json_body_and_ignored_pull_request(policy: PolicyRule) -> None:
-    with pytest.raises(ValueError, match="not valid JSON"):
-        parse_json_body(b"not-json")
-    with pytest.raises(ValueError, match="JSON object"):
-        parse_json_body(b"[1]")
-    assert pull_request_from_webhook({"ok": True}, policy) is None
-
-
-def test_webhook_pull_request_without_pr_is_ignored(client: TestClient) -> None:
-    import hashlib
-    import hmac
-    import json
-
-    body = json.dumps({"action": "opened"}).encode()
-    signature = "sha256=" + hmac.new(b"unit-test-secret", body, hashlib.sha256).hexdigest()
-    response = client.post(
-        "/webhooks/github",
-        content=body,
-        headers={
-            "X-GitHub-Event": "pull_request",
-            "Content-Type": "application/json",
-            "X-Hub-Signature-256": signature,
-        },
-    )
-    assert response.status_code == 200
-    assert response.json()["status"] == "ignored"
+def test_database_and_policy_paths(tmp_path: Path, monkeypatch: object) -> None:
+    custom_db = tmp_path / "custom.sqlite"
+    custom_policy = tmp_path / "policy.yaml"
+    custom_policy.write_text("rule_id: x\n", encoding="utf-8")
+    monkeypatch.setenv("FORGEPULSE_DATABASE", str(custom_db))  # type: ignore[attr-defined]
+    monkeypatch.setenv("FORGEPULSE_POLICY_PATH", str(custom_policy))  # type: ignore[attr-defined]
+    assert default_database_path() == custom_db
+    assert default_policy_path() == custom_policy

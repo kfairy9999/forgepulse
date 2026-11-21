@@ -7,5 +7,13 @@
   "observability": {
     "enabled": true,
     "traces": { "enabled": true }
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "forgepulse",
+      "database_id": "206db150-a08e-49c6-9102-c966384b5f77",
+      "migrations_dir": "migrations"
+    }
+  ]
 }

@@ -1,5 +1,9 @@
+"""Shared fixtures: isolated SQLite workspaces and authenticated clients."""
+
 from __future__ import annotations
 
+import secrets
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -13,31 +17,57 @@ from forgepulse.seed import SEED_GRAPH, SEED_SYMBOLS
 from forgepulse.store import MemoryStore
 
 
-@pytest.fixture
+@pytest.fixture()
+def master_key() -> str:
+    return secrets.token_hex(32)
+
+
+@pytest.fixture()
+def settings(tmp_path: Path, master_key: str) -> Settings:
+    policy = Path.cwd() / "policies" / "default.yaml"
+    if not policy.is_file():
+        policy = Path(__file__).resolve().parents[1] / "policies" / "default.yaml"
+    return Settings(
+        webhook_secret=None,
+        allow_unsigned=False,
+        policy_path=policy,
+        database_path=tmp_path / "forgepulse.sqlite",
+        master_key=master_key,
+    )
+
+
+@pytest.fixture()
+def client(settings: Settings) -> Generator[TestClient, None, None]:
+    app = create_app(settings=settings)
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+@pytest.fixture()
+def workspace(client: TestClient) -> dict[str, object]:
+    response = client.post("/workspaces", json={"name": "Test workspace"})
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+@pytest.fixture()
+def auth(workspace: dict[str, object]) -> dict[str, str]:
+    return {"Authorization": f"Bearer {workspace['token']}"}
+
+
+@pytest.fixture()
 def policy() -> PolicyRule:
-    return load_policy(Path("policies/default.yaml"))
+    path = Path.cwd() / "policies" / "default.yaml"
+    if not path.is_file():
+        path = Path(__file__).resolve().parents[1] / "policies" / "default.yaml"
+    return load_policy(path)
 
 
-@pytest.fixture
+@pytest.fixture()
+def default_policy(policy: PolicyRule) -> PolicyRule:
+    return policy
+
+
+@pytest.fixture()
 def store(policy: PolicyRule) -> MemoryStore:
     return MemoryStore(policy=policy, graph=SEED_GRAPH, symbols=SEED_SYMBOLS)
-
-
-@pytest.fixture
-def settings(tmp_path: Path, policy: PolicyRule) -> Settings:
-    path = tmp_path / "policy.yaml"
-    path.write_text(Path("policies/default.yaml").read_text(encoding="utf-8"), encoding="utf-8")
-    return Settings(webhook_secret="unit-test-secret", allow_unsigned=False, policy_path=path)
-
-
-@pytest.fixture
-def client(settings: Settings, store: MemoryStore) -> TestClient:
-    return TestClient(create_app(settings=settings, store=store))
-
-
-@pytest.fixture
-def unsigned_client(tmp_path: Path, store: MemoryStore) -> TestClient:
-    path = tmp_path / "policy.yaml"
-    path.write_text(Path("policies/default.yaml").read_text(encoding="utf-8"), encoding="utf-8")
-    settings = Settings(webhook_secret=None, allow_unsigned=True, policy_path=path)
-    return TestClient(create_app(settings=settings, store=store))

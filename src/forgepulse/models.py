@@ -26,6 +26,21 @@ class PolicyRule(BaseModel):
     default_reviewers: list[str] = Field(default_factory=lambda: ["@maintainers"])
     protected_reviewers: list[str] = Field(default_factory=lambda: ["@sec-team", "@staff-eng"])
 
+    @field_validator("rule_id")
+    @classmethod
+    def _rule_id(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("rule_id is required")
+        return cleaned
+
+    @field_validator("require_tests_above_lines")
+    @classmethod
+    def _non_negative_lines(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("require_tests_above_lines must be >= 0")
+        return value
+
     @field_validator("protected_paths")
     @classmethod
     def _normalize_paths(cls, value: list[str]) -> list[str]:

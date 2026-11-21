@@ -1,6 +1,6 @@
 # Contributing
 
-This repository is a public prototype. The package is not published to PyPI.
+This repository is a public MIT project. The package is not published to PyPI or npm.
 
 ```bash
 python -m pip install -e ".[dev]"
@@ -10,4 +10,4 @@ python -m mypy --strict src
 python -m pytest --cov=forgepulse --cov-fail-under=90
 ```
 
-Keep policy rules in YAML, not in GitHub UI screenshots. New behavior needs tests. Do not add a default webhook secret.
+The live playground is the TypeScript Worker in `demo/`. After editing `demo/playground.html`, run `node demo/build.mjs` so `demo/src/page.ts` stays in sync. Keep RunnerMesh labeled as routing-only. New behavior needs tests. Do not add a default webhook secret or commit `FORGEPULSE_MASTER_KEY`.

@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ForgePulse — triage, blast radius, and portable policy</title>
-<meta name="description" content="ForgePulse scores pull requests, reroutes CI when hosted runners fail, measures cross-repo blast radius, and evaluates YAML policy outside GitHub's UI. Prototype. In-memory. Not production.">
+<meta name="description" content="ForgePulse scores pull requests, records CI routing when hosted runners fail, measures cross-repo blast radius, and evaluates YAML policy outside GitHub's UI. Durable workspaces. Connect your own repo with a webhook.">
 <meta property="og:title" content="ForgePulse — triage, blast radius, and portable policy">
-<meta property="og:description" content="A live playground for PR triage, CI failover, blast radius, and portable policy. Seeded fictional data. In-memory prototype, not production.">
+<meta property="og:description" content="A working service: PR triage, CI failover routing, blast radius, symbol search, and portable policy. Try the sample org immediately, or connect your own GitHub repo.">
 <meta property="og:url" content="https://forgepulse.kfairley9999.workers.dev">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary">
@@ -23,8 +23,8 @@
     --del: #f8e4dc;
     --del-ink: #8d2d16;
     --stamp: #9d2c14;
-    --pass: #1d5c32;
     --panel: #fffdf8;
+    --focus: #1d1a16;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
@@ -33,156 +33,75 @@
     color: var(--ink);
     font-family: Palatino, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
     min-height: 100vh;
+    line-height: 1.45;
   }
-  header, .layout, footer {
-    max-width: 1100px;
-    margin: 0 auto;
-  }
+  header, .layout, footer, .banner-wrap { max-width: 1100px; margin: 0 auto; }
   header { padding: 28px 32px 8px; }
   .mark {
     font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    font-size: 12px;
-    margin: 0 0 8px;
+    letter-spacing: 0.14em; text-transform: uppercase; font-size: 12px; margin: 0 0 8px;
   }
-  h1 {
-    font-weight: 500;
-    font-size: 28px;
-    line-height: 1.25;
-    margin: 0;
-    max-width: 18em;
-  }
-  .lede {
-    color: var(--muted);
-    font-size: 16px;
-    line-height: 1.45;
-    max-width: 38em;
-    margin: 10px 0 0;
-  }
+  h1 { font-weight: 500; font-size: 28px; line-height: 1.25; margin: 0; max-width: 18em; }
+  h2 { font-weight: 500; font-size: 22px; margin: 0 0 10px; }
+  h3 { font-weight: 500; font-size: 16px; margin: 16px 0 8px; }
+  .lede { color: var(--muted); font-size: 16px; max-width: 40em; margin: 10px 0 0; }
   .status {
-    display: inline-block;
-    margin: 14px 0 0;
-    border: 1px solid var(--rule);
-    background: var(--panel);
-    padding: 6px 10px;
-    font-family: ui-monospace, Menlo, Consolas, monospace;
-    font-size: 11px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--stamp);
+    display: inline-block; margin: 14px 0 0; border: 1px solid var(--rule);
+    background: var(--panel); padding: 6px 10px;
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px;
+    letter-spacing: 0.06em; text-transform: uppercase; color: var(--add-ink);
   }
-  .cta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
-    margin: 14px 0 0;
-    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-    font-size: 12px;
+  .cta, .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .cta { margin: 14px 0 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--rule); padding-bottom: 1px; }
+  a:hover { border-bottom-color: var(--ink); }
+  button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+    outline: 2px solid var(--focus); outline-offset: 2px;
   }
-  .cta a, a.inline {
-    color: var(--ink);
-    text-decoration: none;
-    border-bottom: 1px solid var(--rule);
-    padding-bottom: 1px;
+  .banner-wrap { padding: 8px 32px 0; }
+  .banner, .flash {
+    border: 1px solid var(--rule); background: var(--panel); padding: 10px 14px; margin: 0 0 8px;
   }
-  .cta a:hover, a.inline:hover { border-bottom-color: var(--ink); }
-  button:focus-visible, a:focus-visible, textarea:focus-visible {
-    outline: 2px solid var(--ink);
-    outline-offset: 2px;
-  }
-  .layout {
-    display: grid;
-    grid-template-columns: 240px 1fr;
-    gap: 24px;
-    padding: 20px 32px 48px;
-  }
-  nav { display: flex; flex-direction: column; gap: 6px; }
+  .flash.error { background: var(--del); border-color: #e8c7bb; color: var(--del-ink); }
+  .flash.ok { background: var(--add); border-color: #cfe3d1; color: var(--add-ink); }
+  .layout { display: grid; grid-template-columns: 200px 1fr; gap: 24px; padding: 16px 32px 48px; }
+  nav { display: flex; flex-direction: column; gap: 4px; }
   nav button {
-    text-align: left;
-    background: transparent;
-    border: 0;
-    border-left: 3px solid transparent;
-    padding: 8px 10px;
-    font: inherit;
-    color: var(--ink);
-    cursor: pointer;
+    text-align: left; background: transparent; border: 0; border-left: 3px solid transparent;
+    padding: 10px 10px; font: inherit; color: var(--ink); cursor: pointer; min-height: 44px;
   }
-  nav button small {
-    display: block;
-    color: var(--muted);
-    font-family: ui-monospace, Menlo, Consolas, monospace;
-    font-size: 11px;
-    margin-top: 2px;
-  }
+  nav button small { display: block; color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; margin-top: 2px; }
   nav button[aria-current="true"] { border-left-color: var(--stamp); background: #fffaf3; }
   main { min-width: 0; }
-  #stage {
-    background: var(--panel);
-    border: 1px solid var(--rule);
-    min-height: 360px;
-    padding: 20px 22px 24px;
-  }
+  #stage { background: var(--panel); border: 1px solid var(--rule); min-height: 420px; padding: 20px 22px 24px; }
   .kicker {
-    font-family: ui-monospace, Menlo, Consolas, monospace;
-    font-size: 11px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin: 0 0 10px;
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px;
+    letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px;
   }
-  h2 { font-weight: 500; font-size: 22px; margin: 0 0 10px; }
-  .note { color: var(--muted); margin: 0 0 16px; line-height: 1.45; }
+  .note { color: var(--muted); margin: 0 0 14px; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
-  .chips button, .run {
-    font-family: ui-monospace, Menlo, Consolas, monospace;
-    font-size: 12px;
-    background: transparent;
-    border: 1px solid var(--rule);
-    padding: 6px 10px;
-    cursor: pointer;
-    color: var(--ink);
+  button, .btn {
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
+    background: transparent; border: 1px solid var(--rule); padding: 8px 12px;
+    cursor: pointer; color: var(--ink); min-height: 40px;
   }
   .chips button[aria-current="true"] { border-color: var(--ink); background: var(--paper); }
-  .run {
-    background: var(--ink);
-    color: var(--paper);
-    border-color: var(--ink);
-    padding: 8px 14px;
-  }
-  .run:disabled { opacity: 0.35; cursor: default; }
-  .split {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-  }
-  textarea {
-    width: 100%;
-    min-height: 260px;
-    border: 1px solid var(--rule);
-    background: var(--paper);
-    color: var(--ink);
-    font-family: ui-monospace, Menlo, Consolas, monospace;
-    font-size: 12px;
-    line-height: 1.45;
+  .run, button.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  button:disabled { opacity: 0.35; cursor: default; }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  input, textarea, select {
+    width: 100%; border: 1px solid var(--rule); background: var(--paper); color: var(--ink);
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.45;
     padding: 10px 12px;
-    resize: vertical;
   }
-  .result {
-    border: 1px solid var(--rule);
-    padding: 12px 14px;
-    min-height: 260px;
-    background: #fffaf3;
-  }
+  textarea { min-height: 200px; resize: vertical; }
+  label { display: block; font-size: 14px; margin: 0 0 6px; }
+  .field { margin: 0 0 12px; }
+  .result { border: 1px solid var(--rule); padding: 12px 14px; min-height: 160px; background: #fffaf3; }
   .badge {
-    display: inline-block;
-    font-family: ui-monospace, Menlo, Consolas, monospace;
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 3px 8px;
-    margin: 0 0 10px;
-    border: 1px solid var(--rule);
+    display: inline-block; font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 3px 8px; margin: 0 0 10px; border: 1px solid var(--rule);
   }
   .badge.fast-track { background: var(--add); color: var(--add-ink); border-color: #cfe3d1; }
   .badge.standard-review { background: var(--panel); }
@@ -191,163 +110,134 @@
   .score { font-size: 28px; font-weight: 500; margin: 0 0 4px; }
   .bar { height: 6px; background: var(--rule); margin: 0 0 14px; }
   .bar span { display: block; height: 6px; background: var(--stamp); }
-  .reasons, .matches { margin: 0; padding-left: 18px; }
-  .reasons li, .matches li { margin: 0 0 6px; }
-  pre {
-    margin: 0;
-    font-family: ui-monospace, Menlo, Consolas, monospace;
-    font-size: 12px;
-    line-height: 1.45;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
+  ul.reasons { margin: 0; padding-left: 18px; }
   table { width: 100%; border-collapse: collapse; font-size: 15px; }
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
   th {
-    font-family: ui-monospace, Menlo, Consolas, monospace;
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--muted);
-    font-weight: 500;
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 500;
   }
-  footer {
-    padding: 0 32px 32px;
-    color: var(--muted);
-    font-size: 14px;
-    line-height: 1.45;
+  .steps { margin: 0; padding: 0; list-style: none; counter-reset: step; }
+  .steps li { display: flex; gap: 12px; margin: 0 0 12px; align-items: flex-start; }
+  .steps li::before {
+    counter-increment: step; content: counter(step);
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
+    border: 1px solid var(--rule); min-width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center; background: var(--paper);
   }
+  .copyrow { display: flex; gap: 8px; align-items: stretch; }
+  .copyrow input { flex: 1; }
+  .empty { color: var(--muted); border: 1px dashed var(--rule); padding: 16px; }
+  footer { padding: 0 32px 32px; color: var(--muted); font-size: 14px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
   @media (max-width: 800px) {
     .layout { grid-template-columns: 1fr; padding: 12px 16px 32px; }
-    header { padding: 20px 16px 0; }
+    header, .banner-wrap, footer { padding-left: 16px; padding-right: 16px; }
     h1 { font-size: 22px; }
-    nav { flex-direction: row; overflow-x: auto; }
-    nav button { min-width: 160px; border-left: 0; border-bottom: 3px solid transparent; }
+    nav { flex-direction: row; overflow-x: auto; gap: 0; }
+    nav button { min-width: auto; padding: 8px 12px; border-left: 0; border-bottom: 3px solid transparent; white-space: nowrap; }
+    nav button small { display: none; }
     nav button[aria-current="true"] { border-bottom-color: var(--stamp); }
     .split { grid-template-columns: 1fr; }
-    footer { padding: 0 16px 24px; }
-    textarea, .result { min-height: 200px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { scroll-behavior: auto !important; }
   }
 </style>
 </head>
 <body>
+<a class="sr" href="#stage">Skip to content</a>
 <header>
   <p class="mark">ForgePulse</p>
   <h1>Triage the pull request. Measure the blast radius. Keep the policy off GitHub.</h1>
-  <p class="lede">Five modules sit next to GitHub, not inside its settings screens: PR signal scoring, CI failover, cross-repo blast radius, symbol search, and portable YAML policy. This page calls a live API on seeded fictional data.</p>
-  <p class="status">Prototype · In-memory state · Not production</p>
+  <p class="lede">ForgePulse sits next to GitHub and scores incoming PRs, records CI failover routing, walks downstream dependents, indexes symbols and owners, and evaluates portable policy from YAML. Your workspace is stored in a durable database and survives restarts.</p>
+  <p class="status" id="health-pill">Checking storage…</p>
   <p class="cta">
     <a href="https://github.com/kfairy9999/forgepulse">Source on GitHub</a>
-    <a href="https://github.com/kfairy9999/forgepulse#quickstart">Run it locally</a>
-    <a href="/healthz">Health</a>
+    <a href="https://github.com/kfairy9999/forgepulse#quickstart">Quickstart</a>
+    <a href="#connect" id="connect-jump">Connect your repo</a>
   </p>
 </header>
+<div class="banner-wrap" id="banners" aria-live="polite"></div>
 <div class="layout">
   <nav id="modules" aria-label="Modules"></nav>
   <main>
-    <section id="stage" aria-live="polite"></section>
+    <section id="stage"></section>
   </main>
 </div>
 <footer>
-  Seeded fictional repositories only: payments, auth, billing, and a web app.
-  The queue and index live in memory in this isolate and reset when it sleeps.
-  Webhook signatures fail closed. Policy is loaded from YAML, not from GitHub UI settings.
+  RunnerMesh records a routing decision only — it does not launch GitHub Actions runners.
+  Native GitHub pull-request webhooks omit changed file names; add a fine-grained personal access token if you want ForgePulse to fetch them.
+  Workspaces are isolated by a bearer token. Keep your token and webhook secret private.
 </footer>
 <script>
 const MODULES = [
   { id: "triage", title: "TriageGate", blurb: "Score a pull request" },
   { id: "graph", title: "GraphSync", blurb: "Downstream blast radius" },
   { id: "atlas", title: "CodeAtlas", blurb: "Symbol and owner search" },
-  { id: "runners", title: "RunnerMesh", blurb: "Priority queue and failover" },
-  { id: "policy", title: "PolicyVault", blurb: "Portable YAML rules" }
+  { id: "runners", title: "RunnerMesh", blurb: "Routing decisions only" },
+  { id: "policy", title: "PolicyVault", blurb: "Editable YAML rules" },
+  { id: "connect", title: "Connect", blurb: "Your GitHub repo" },
+  { id: "api", title: "API", blurb: "Token and endpoints" }
 ];
-
 const TRIAGE_CASES = {
-  trusted: {
-    label: "Trusted fix with tests",
-    body: {
-      repo: "org/payments-core",
-      pr_number: 412,
-      author: "ada",
-      author_merged_prs: 12,
-      title: "Fix settlement rounding for weekend batches",
-      body: "Keeps the weekend cutoff from double-rounding cents.",
-      files_changed: 3,
-      lines_added: 36,
-      lines_deleted: 9,
-      has_tests: true,
-      changed_paths: ["src/settlement/engine.py", "tests/test_engine.py"]
-    }
-  },
-  ai: {
-    label: "First-time AI dump",
-    body: {
-      repo: "org/web-app",
-      pr_number: 903,
-      author: "new-hire",
-      author_merged_prs: 0,
-      title: "update code",
-      body: "Generated by Copilot. Rewrites checkout.",
-      files_changed: 18,
-      lines_added: 420,
-      lines_deleted: 80,
-      has_tests: false,
-      ai_assisted: true,
-      changed_paths: ["app/checkout/CheckoutForm.tsx"]
-    }
-  },
-  protected: {
-    label: "Auth change, no tests",
-    body: {
-      repo: "org/auth-gateway",
-      pr_number: 108,
-      author: "guest",
-      author_merged_prs: 1,
-      title: "Tighten session cookie flags",
-      body: "Sets Secure and HttpOnly on the session cookie.",
-      files_changed: 1,
-      lines_added: 14,
-      lines_deleted: 2,
-      has_tests: false,
-      changed_paths: ["pkg/auth/chain.go"],
-      touches_critical_paths: ["pkg/auth/chain.go"]
-    }
-  },
-  unknown: {
-    label: "Webhook with no file list",
-    body: {
-      repo: "org/payments-core",
-      pr_number: 500,
-      author: "ada",
-      author_merged_prs: 8,
-      title: "Refactor settlement weekend cutoff handling",
-      body: "Native GitHub webhooks omit changed file names.",
-      files_changed: 6,
-      lines_added: 200,
-      lines_deleted: 20
-    }
-  }
+  trusted: { label: "Trusted fix with tests", body: { repo: "org/payments-core", pr_number: 412, author: "ada", author_merged_prs: 12, title: "Fix settlement rounding for weekend batches", body: "Keeps the weekend cutoff from double-rounding cents.", files_changed: 3, lines_added: 36, lines_deleted: 9, has_tests: true, changed_paths: ["src/settlement/engine.py", "tests/test_engine.py"] } },
+  ai: { label: "First-time AI dump", body: { repo: "org/web-app", pr_number: 903, author: "new-hire", author_merged_prs: 0, title: "update code", body: "Generated by Copilot. Rewrites checkout.", files_changed: 18, lines_added: 420, lines_deleted: 80, has_tests: false, ai_assisted: true, changed_paths: ["app/checkout/CheckoutForm.tsx"] } },
+  protected: { label: "Auth change, no tests", body: { repo: "org/auth-gateway", pr_number: 108, author: "guest", author_merged_prs: 1, title: "Tighten session cookie flags", body: "Sets Secure and HttpOnly on the session cookie.", files_changed: 1, lines_added: 14, lines_deleted: 2, has_tests: false, changed_paths: ["pkg/auth/chain.go"], touches_critical_paths: ["pkg/auth/chain.go"] } },
+  unknown: { label: "Webhook with no file list", body: { repo: "org/payments-core", pr_number: 500, author: "ada", author_merged_prs: 8, title: "Refactor settlement weekend cutoff handling", body: "Native GitHub webhooks omit changed file names.", files_changed: 6, lines_added: 200, lines_deleted: 20 } }
 };
-
-const GRAPH_REPOS = ["org/shared-types", "org/payments-core", "org/auth-gateway", "org/web-app"];
-const SEARCHES = ["process_settlement", "@sec-team", "CheckoutForm.tsx", "Money"];
+const STORE = { id: "forgepulse.workspace_id", token: "forgepulse.token", secret: "forgepulse.webhook_secret" };
 
 const nav = document.getElementById("modules");
 const stage = document.getElementById("stage");
+const banners = document.getElementById("banners");
 let current = "triage";
+let session = { id: localStorage.getItem(STORE.id) || "", token: localStorage.getItem(STORE.token) || "", secret: localStorage.getItem(STORE.secret) || "", workspace: null };
 
 function el(tag, attrs, children) {
   const node = document.createElement(tag);
   Object.entries(attrs || {}).forEach(([key, value]) => {
     if (key === "class") node.className = value;
-    else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+    else if (key.startsWith("on") && typeof value === "function") node.addEventListener(key.slice(2), value);
     else if (value === true) node.setAttribute(key, "");
     else if (value !== false && value != null) node.setAttribute(key, value);
   });
-  (children || []).forEach((child) => {
-    node.appendChild(typeof child === "string" ? document.createTextNode(child) : child);
-  });
+  (children || []).forEach((child) => node.appendChild(typeof child === "string" ? document.createTextNode(child) : child));
   return node;
+}
+
+function flash(kind, text) {
+  const box = el("div", { class: "flash " + kind, role: kind === "error" ? "alert" : "status" }, [text]);
+  banners.replaceChildren(box);
+}
+
+function clearFlash() { banners.replaceChildren(); }
+
+function sessionBanner() {
+  if (!session.workspace) return;
+  const kind = session.workspace.kind === "guest" ? "You are in a sample workspace. Everything you do is saved and survives a refresh." : "You are in your workspace. Connect a GitHub repo anytime from the Connect tab.";
+  const bar = el("div", { class: "banner" }, [
+    kind + " Workspace " + session.workspace.id + ".",
+    " ",
+    el("a", { href: "#connect", onclick: (e) => { e.preventDefault(); current = "connect"; render(); } }, ["Connect your repo"])
+  ]);
+  banners.appendChild(bar);
+}
+
+async function api(path, options) {
+  const headers = Object.assign({ "content-type": "application/json" }, (options && options.headers) || {});
+  if (session.token) headers.authorization = "Bearer " + session.token;
+  const response = await fetch(path, Object.assign({}, options, { headers }));
+  const text = await response.text();
+  let data;
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { detail: text }; }
+  if (!response.ok) {
+    const err = new Error((data && data.detail) || response.statusText);
+    err.status = response.status;
+    err.payload = data;
+    throw err;
+  }
+  return data;
 }
 
 function renderNav() {
@@ -356,64 +246,72 @@ function renderNav() {
     nav.appendChild(el("button", {
       type: "button",
       "aria-current": mod.id === current ? "true" : "false",
-      onclick: () => { current = mod.id; render(); }
+      onclick: () => { current = mod.id; history.replaceState(null, "", "#" + mod.id); render(); }
     }, [mod.title, el("small", {}, [mod.blurb])]));
   });
 }
 
-async function api(path, options) {
-  const response = await fetch(path, options);
-  const text = await response.text();
-  let data;
-  try { data = JSON.parse(text); } catch { data = text; }
-  if (!response.ok) {
-    const err = new Error((data && data.detail) || response.statusText);
-    err.payload = data;
-    throw err;
-  }
-  return data;
+function renderDecision(container, data) {
+  const width = Math.round((data.signal_score || 0) * 100);
+  container.replaceChildren(
+    el("span", { class: "badge " + data.action }, [data.action]),
+    el("p", { class: "score" }, [String(data.signal_score)]),
+    el("div", { class: "bar", "aria-hidden": "true" }, [el("span", { style: "width:" + width + "%" })]),
+    el("p", { class: "note" }, [
+      (data.has_tests == null ? "Tests unknown" : (data.has_tests ? "Tests present" : "No tests")) +
+      " · " + (data.has_tests_source || "unknown") +
+      " · reviewers " + (data.suggested_reviewers || []).join(", ")
+    ]),
+    el("ul", { class: "reasons" }, (data.reasons || []).map((reason) => el("li", {}, [reason])))
+  );
 }
 
-function renderTriage() {
+async function renderTriage() {
+  const editor = el("textarea", { spellcheck: "false", "aria-label": "Pull request JSON" }, [JSON.stringify(TRIAGE_CASES.trusted.body, null, 2)]);
+  const result = el("div", { class: "result" }, [el("p", { class: "note" }, ["Running the sample…"])]);
+  const history = el("div", {}, [el("p", { class: "note" }, ["Loading history…"])]);
   let selected = "trusted";
-  const editor = el("textarea", { id: "payload", spellcheck: "false", "aria-label": "Pull request JSON" }, [JSON.stringify(TRIAGE_CASES.trusted.body, null, 2)]);
-  const result = el("div", { class: "result", id: "out" }, [el("p", { class: "note" }, ["Pick a case, or edit the JSON, then run TriageGate."])]);
-
   function applyCase(id) {
     selected = id;
     editor.value = JSON.stringify(TRIAGE_CASES[id].body, null, 2);
-    Array.from(stage.querySelectorAll(".chips button")).forEach((btn) => {
-      btn.setAttribute("aria-current", btn.dataset.id === id ? "true" : "false");
-    });
+    stage.querySelectorAll(".chips button").forEach((btn) => btn.setAttribute("aria-current", btn.dataset.id === id ? "true" : "false"));
   }
-
+  async function loadHistory() {
+    try {
+      const data = await api("/triage/history");
+      if (!data.events.length) {
+        history.replaceChildren(el("div", { class: "empty" }, ["No triage decisions yet. Run a sample or send a webhook."]));
+        return;
+      }
+      const rows = data.events.map((item) => el("tr", {}, [
+        el("td", {}, [item.created_at.slice(11, 19)]),
+        el("td", {}, [item.repo + " #" + item.pr_number]),
+        el("td", {}, [item.action]),
+        el("td", {}, [String(item.signal_score)]),
+        el("td", {}, [item.source])
+      ]));
+      history.replaceChildren(
+        el("h3", {}, ["Recent decisions (saved)"]),
+        el("table", {}, [
+          el("thead", {}, [el("tr", {}, ["Time", "PR", "Action", "Score", "Source"].map((h) => el("th", {}, [h])))]),
+          el("tbody", {}, rows)
+        ])
+      );
+    } catch (error) {
+      history.replaceChildren(el("p", { class: "note" }, [error.message]));
+    }
+  }
   async function run() {
     result.replaceChildren(el("p", { class: "note" }, ["Running…"]));
     try {
       const body = JSON.parse(editor.value);
-      const data = await api("/triage/pr", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      const reasons = el("ul", { class: "reasons" }, (data.reasons || []).map((reason) => el("li", {}, [reason])));
-      const width = Math.round((data.signal_score || 0) * 100);
-      result.replaceChildren(
-        el("span", { class: "badge " + data.action }, [data.action]),
-        el("p", { class: "score" }, [String(data.signal_score)]),
-        el("div", { class: "bar" }, [el("span", { style: "width:" + width + "%" })]),
-        el("p", { class: "note" }, [
-          (data.has_tests == null ? "Tests unknown" : (data.has_tests ? "Tests present" : "No tests")) +
-          " · " + (data.has_tests_source || "unknown") +
-          " · reviewers " + (data.suggested_reviewers || []).join(", ")
-        ]),
-        reasons
-      );
+      const data = await api("/triage/pr", { method: "POST", body: JSON.stringify(body) });
+      renderDecision(result, data);
+      await loadHistory();
     } catch (error) {
       result.replaceChildren(el("p", { class: "note" }, [error.message || "Request failed"]));
     }
   }
-
   stage.replaceChildren(
     el("p", { class: "kicker" }, ["TriageGate"]),
     el("h2", {}, ["Score the signal. Do not guess the file list."]),
@@ -422,47 +320,78 @@ function renderTriage() {
       el("button", { type: "button", "data-id": id, "aria-current": id === selected ? "true" : "false", onclick: () => applyCase(id) }, [item.label])
     )),
     el("p", {}, [el("button", { class: "run", type: "button", onclick: run }, ["Run triage"])]),
-    el("div", { class: "split" }, [editor, result])
+    el("div", { class: "split" }, [editor, result]),
+    history
   );
-  run();
+  await run();
 }
 
-function renderGraph() {
-  const result = el("div", { class: "result", id: "out" }, [el("p", { class: "note" }, ["Choose a repository to walk its downstream dependents."])]);
-  async function run(repo) {
-    result.replaceChildren(el("p", { class: "note" }, ["Running…"]));
+async function renderGraph() {
+  const result = el("div", { class: "result" });
+  const list = el("div", {});
+  const sourceIn = el("input", { "aria-label": "Source repository", placeholder: "org/shared-types", value: "org/shared-types" });
+  const destIn = el("input", { "aria-label": "Downstream repository", placeholder: "org/mobile-app", value: "org/mobile-app" });
+  async function showRadius(repo) {
+    result.replaceChildren(el("p", { class: "note" }, ["Walking dependents…"]));
     try {
-      const data = await api("/graph/impact/" + repo);
+      const data = await api("/graph/impact/" + encodeURI(repo));
       const items = (data.downstream_repos || []).map((name, index) => el("li", {}, [(index + 1) + ". " + name]));
       result.replaceChildren(
         el("p", { class: "score" }, [String(data.total_impacted)]),
         el("p", { class: "note" }, ["downstream repositories from " + data.source_repo]),
-        items.length ? el("ul", { class: "reasons" }, items) : el("p", { class: "note" }, ["No downstream dependents."])
+        items.length ? el("ul", { class: "reasons" }, items) : el("div", { class: "empty" }, ["No downstream dependents."])
       );
     } catch (error) {
-      result.replaceChildren(el("p", { class: "note" }, [error.message || "Request failed"]));
+      result.replaceChildren(el("p", { class: "note" }, [error.message]));
     }
+  }
+  async function refreshEdges() {
+    const data = await api("/graph");
+    const edges = Object.entries(data.edges || []).flatMap(([source, dests]) => dests.map((dest) => source + " → " + dest));
+    const repos = Object.keys(data.edges || {});
+    Object.values(data.edges || {}).forEach((dests) => dests.forEach((d) => { if (!repos.includes(d)) repos.push(d); }));
+    list.replaceChildren(
+      el("h3", {}, ["Dependency edges (saved)"]),
+      edges.length ? el("ul", { class: "reasons" }, edges.map((e) => el("li", {}, [e]))) : el("div", { class: "empty" }, ["No edges yet. Add one below."]),
+      el("div", { class: "chips" }, repos.map((repo) => el("button", { type: "button", onclick: () => showRadius(repo) }, [repo])))
+    );
+    if (repos.includes("org/shared-types")) showRadius("org/shared-types");
+    else if (repos[0]) showRadius(repos[0]);
+  }
+  async function add() {
+    try {
+      await api("/graph/edges", { method: "POST", body: JSON.stringify({ source: sourceIn.value.trim(), dest: destIn.value.trim() }) });
+      flash("ok", "Edge saved. It will still be here after a refresh.");
+      await refreshEdges();
+    } catch (error) { flash("error", error.message); }
   }
   stage.replaceChildren(
     el("p", { class: "kicker" }, ["GraphSync"]),
     el("h2", {}, ["A change in shared types does not stay in shared types."]),
-    el("p", { class: "note" }, ["Breadth-first walk of a fictional dependency graph. Cycles are ignored. The source repository is not counted."]),
-    el("div", { class: "chips" }, GRAPH_REPOS.map((repo) => el("button", { type: "button", onclick: () => run(repo) }, [repo]))),
+    el("p", { class: "note" }, ["Breadth-first walk of your workspace graph. Cycles are ignored. The source repository is not counted."]),
+    list,
+    el("h3", {}, ["Add an edge"]),
+    el("div", { class: "split" }, [el("div", { class: "field" }, [el("label", {}, ["From"]), sourceIn]), el("div", { class: "field" }, [el("label", {}, ["To"]), destIn])]),
+    el("p", {}, [el("button", { class: "run", type: "button", onclick: add }, ["Save edge"])]),
     result
   );
-  run("org/shared-types");
+  try { await refreshEdges(); } catch (error) { flash("error", error.message); }
 }
 
-function renderAtlas() {
-  const result = el("div", { class: "result" }, [el("p", { class: "note" }, ["Search the seeded index."])]);
-  const input = el("textarea", { spellcheck: "false", "aria-label": "Search query", style: "min-height:80px" }, ["process_settlement"]);
+async function renderAtlas() {
+  const result = el("div", { class: "result" });
+  const input = el("input", { "aria-label": "Search query", value: "process_settlement" });
+  const repo = el("input", { "aria-label": "Repo", placeholder: "org/web-app", value: "org/web-app" });
+  const symbol = el("input", { "aria-label": "Symbol", placeholder: "RefundBanner", value: "RefundBanner" });
+  const filePath = el("input", { "aria-label": "File path", placeholder: "app/refund/RefundBanner.tsx", value: "app/refund/RefundBanner.tsx" });
+  const owners = el("input", { "aria-label": "Owners", placeholder: "@web-eng", value: "@web-eng" });
   async function run(query) {
     if (query != null) input.value = query;
-    result.replaceChildren(el("p", { class: "note" }, ["Running…"]));
+    result.replaceChildren(el("p", { class: "note" }, ["Searching…"]));
     try {
       const data = await api("/index/search?q=" + encodeURIComponent(input.value.trim()));
       if (!data.matches.length) {
-        result.replaceChildren(el("p", { class: "note" }, ["No symbols matched “" + data.query + "”."]));
+        result.replaceChildren(el("div", { class: "empty" }, ["No symbols matched “" + data.query + "”. Add one below."]));
         return;
       }
       const rows = data.matches.map((item) => el("tr", {}, [
@@ -470,58 +399,48 @@ function renderAtlas() {
         el("td", {}, [item.repo]),
         el("td", {}, [item.file_path]),
         el("td", {}, [(item.owners || []).join(", ")]),
-        el("td", {}, ["#" + (item.related_prs || []).join(", #")])
+        el("td", {}, [item.related_prs.length ? "#" + item.related_prs.join(", #") : "—"])
       ]));
       result.replaceChildren(
-        el("p", { class: "note" }, [data.count + " match" + (data.count === 1 ? "" : "es")]),
+        el("p", { class: "note" }, [data.count + " match" + (data.count === 1 ? "" : "es") + " (saved in this workspace)"]),
         el("table", {}, [
           el("thead", {}, [el("tr", {}, ["Symbol", "Repo", "Path", "Owners", "PRs"].map((h) => el("th", {}, [h])))]),
           el("tbody", {}, rows)
         ])
       );
-    } catch (error) {
-      result.replaceChildren(el("p", { class: "note" }, [error.message || "Request failed"]));
-    }
+    } catch (error) { result.replaceChildren(el("p", { class: "note" }, [error.message])); }
+  }
+  async function add() {
+    try {
+      await api("/index/symbol", { method: "POST", body: JSON.stringify({ repo: repo.value.trim(), symbol: symbol.value.trim(), file_path: filePath.value.trim(), owners: owners.value.split(",").map((s) => s.trim()).filter(Boolean), related_prs: [] }) });
+      flash("ok", "Symbol saved.");
+      await run(symbol.value.trim());
+    } catch (error) { flash("error", error.message); }
   }
   stage.replaceChildren(
     el("p", { class: "kicker" }, ["CodeAtlas"]),
     el("h2", {}, ["Find the symbol, the owner, and the last pull request."]),
-    el("p", { class: "note" }, ["The index is seeded with fictional payments, auth, and checkout symbols. Search is case-insensitive."]),
-    el("div", { class: "chips" }, SEARCHES.map((query) => el("button", { type: "button", onclick: () => run(query) }, [query]))),
-    el("p", {}, [input, " ", el("button", { class: "run", type: "button", onclick: () => run() }, ["Search"])]),
-    result
+    el("p", { class: "note" }, ["Search is case-insensitive and includes owners and paths. Add your own symbols; they persist."]),
+    el("div", { class: "chips" }, ["process_settlement", "@sec-team", "CheckoutForm.tsx", "Money"].map((q) => el("button", { type: "button", onclick: () => run(q) }, [q]))),
+    el("div", { class: "copyrow" }, [input, el("button", { class: "run", type: "button", onclick: () => run() }, ["Search"])]),
+    result,
+    el("h3", {}, ["Index a symbol"]),
+    el("div", { class: "split" }, [
+      el("div", {}, [el("div", { class: "field" }, [el("label", {}, ["Repository"]), repo]), el("div", { class: "field" }, [el("label", {}, ["Symbol"]), symbol])]),
+      el("div", {}, [el("div", { class: "field" }, [el("label", {}, ["File path"]), filePath]), el("div", { class: "field" }, [el("label", {}, ["Owners"]), owners])])
+    ]),
+    el("p", {}, [el("button", { class: "primary", type: "button", onclick: add }, ["Save symbol"])])
   );
-  run("process_settlement");
+  await run("process_settlement");
 }
 
-function renderRunners() {
-  const editor = el("textarea", { spellcheck: "false", "aria-label": "CI job JSON" }, [JSON.stringify({
-    job_id: "payments-core-ci",
-    repo: "org/payments-core",
-    branch: "fix/weekend-cutoff",
-    priority: 85,
-    preferred_pool: "ephemeral-cloud",
-    github_hosted_healthy: false
-  }, null, 2)]);
-  const result = el("div", { class: "result" }, [el("p", { class: "note" }, ["Enqueue a job, then inspect the in-memory queue."])]);
-  async function enqueue() {
-    result.replaceChildren(el("p", { class: "note" }, ["Running…"]));
-    try {
-      const body = JSON.parse(editor.value);
-      await api("/ci/enqueue", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      await showQueue();
-    } catch (error) {
-      result.replaceChildren(el("p", { class: "note" }, [error.message || "Request failed"]));
-    }
-  }
+async function renderRunners() {
+  const editor = el("textarea", { spellcheck: "false", "aria-label": "CI job JSON" }, [JSON.stringify({ job_id: "payments-core-ci-" + Date.now(), repo: "org/payments-core", branch: "fix/weekend-cutoff", priority: 85, preferred_pool: "ephemeral-cloud", github_hosted_healthy: false }, null, 2)]);
+  const result = el("div", { class: "result" });
   async function showQueue() {
     const data = await api("/ci/queue");
     if (!data.jobs.length) {
-      result.replaceChildren(el("p", { class: "note" }, ["Queue is empty. Depth 0."]));
+      result.replaceChildren(el("div", { class: "empty" }, ["Queue is empty. Enqueue a job to see failover routing. This is a routing record only — no runners are launched."]));
       return;
     }
     const rows = data.jobs.map((job) => el("tr", {}, [
@@ -532,56 +451,214 @@ function renderRunners() {
       el("td", {}, [job.route_reason])
     ]));
     result.replaceChildren(
-      el("p", { class: "note" }, ["Depth " + data.queue_depth + ". Sorted by priority, then a monotonic sequence — not by timestamp strings."]),
+      el("p", { class: "note" }, [(data.disclaimer || "Routing decision only.") + " Depth " + data.queue_depth + ". Sorted by priority, then a monotonic sequence. Saved in this workspace."]),
       el("table", {}, [
         el("thead", {}, [el("tr", {}, ["Priority", "Seq", "Job", "Pool", "Reason"].map((h) => el("th", {}, [h])))]),
         el("tbody", {}, rows)
       ])
     );
   }
+  async function enqueue() {
+    try {
+      const body = JSON.parse(editor.value);
+      await api("/ci/enqueue", { method: "POST", body: JSON.stringify(body) });
+      flash("ok", "Job queued. Refresh the page — it will still be in the queue.");
+      await showQueue();
+    } catch (error) { flash("error", error.message); }
+  }
   stage.replaceChildren(
     el("p", { class: "kicker" }, ["RunnerMesh"]),
     el("h2", {}, ["If hosted runners are degraded, the job still has a pool."]),
-    el("p", { class: "note" }, ["This queue lives in memory in the current Worker isolate. It is a demonstration, not a dispatcher."]),
-    el("p", {}, [
-      el("button", { class: "run", type: "button", onclick: enqueue }, ["Enqueue job"]),
-      " ",
-      el("button", { type: "button", class: "chips", onclick: showQueue, style: "padding:8px 14px;border:1px solid var(--rule);background:transparent;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;cursor:pointer" }, ["Show queue"])
-    ]),
+    el("p", { class: "note" }, ["Honest scope: ForgePulse records a routing decision and stores the queue. It does not start GitHub-hosted or self-hosted runners."]),
+    el("p", {}, [el("button", { class: "run", type: "button", onclick: enqueue }, ["Enqueue job"]), " ", el("button", { type: "button", onclick: showQueue }, ["Refresh queue"])]),
     el("div", { class: "split" }, [editor, result])
   );
-  showQueue();
+  try { await showQueue(); } catch (error) { flash("error", error.message); }
 }
 
 async function renderPolicy() {
+  const editor = el("textarea", { spellcheck: "false", "aria-label": "Policy JSON" });
+  const status = el("p", { class: "note" }, ["Loading the active policy…"]);
+  async function load() {
+    const data = await api("/policy");
+    editor.value = JSON.stringify(data, null, 2);
+    status.textContent = "This policy is stored in your workspace. Edit it, save, then refresh — it will still be here.";
+  }
+  async function save() {
+    try {
+      const body = JSON.parse(editor.value);
+      const data = await api("/policy", { method: "PUT", body: JSON.stringify(body) });
+      editor.value = JSON.stringify(data, null, 2);
+      flash("ok", "Policy saved and validated.");
+    } catch (error) { flash("error", error.message); }
+  }
   stage.replaceChildren(
     el("p", { class: "kicker" }, ["PolicyVault"]),
-    el("h2", {}, ["Rules live in YAML, not in a GitHub settings screen."]),
-    el("p", { class: "note" }, ["Loading the active policy…"])
+    el("h2", {}, ["Rules live here, not in a GitHub settings screen."]),
+    status,
+    editor,
+    el("p", {}, [el("button", { class: "run", type: "button", onclick: save }, ["Validate and save"])])
   );
-  try {
-    const data = await api("/policy");
-    stage.replaceChildren(
-      el("p", { class: "kicker" }, ["PolicyVault"]),
-      el("h2", {}, ["Rules live in YAML, not in a GitHub settings screen."]),
-      el("p", { class: "note" }, ["The default org policy is version-controlled. Large changes without tests are flagged. Protected paths without tests are blocked. Unverified AI PRs from first-time authors go to quarantine."]),
-      el("div", { class: "result" }, [el("pre", {}, [JSON.stringify(data, null, 2)])])
-    );
-  } catch (error) {
-    stage.replaceChildren(el("p", { class: "note" }, [error.message || "Request failed"]));
+  try { await load(); } catch (error) { flash("error", error.message); }
+}
+
+function copyInput(input) {
+  input.select();
+  navigator.clipboard.writeText(input.value).then(() => flash("ok", "Copied.")).catch(() => document.execCommand("copy"));
+}
+
+async function renderConnect() {
+  const urlBox = el("input", { readOnly: true, "aria-label": "Webhook URL", value: session.workspace ? session.workspace.webhook_url : "" });
+  const secretBox = el("input", { readOnly: true, "aria-label": "Webhook secret", value: session.secret || "(shown only when first created or rotated)" });
+  const tokenBox = el("input", { type: "password", autocomplete: "off", "aria-label": "GitHub token", placeholder: "github_pat_… or ghp_…" });
+  const events = el("div", {});
+  async function loadEvents() {
+    try {
+      const data = await api("/webhooks/events");
+      if (!data.events.length) {
+        events.replaceChildren(el("div", { class: "empty" }, ["No webhook deliveries yet. After you add the webhook, GitHub will appear here."]));
+        return;
+      }
+      const rows = data.events.map((item) => el("tr", {}, [
+        el("td", {}, [String(item.created_at).slice(11, 19)]),
+        el("td", {}, [item.github_event || "—"]),
+        el("td", {}, [item.status]),
+        el("td", {}, [item.detail || "—"])
+      ]));
+      events.replaceChildren(el("table", {}, [
+        el("thead", {}, [el("tr", {}, ["Time", "Event", "Status", "Detail"].map((h) => el("th", {}, [h])))]),
+        el("tbody", {}, rows)
+      ]));
+    } catch (error) { events.replaceChildren(el("p", { class: "note" }, [error.message])); }
   }
+  async function rotate() {
+    if (!confirm("This replaces the webhook secret. You will need to update it in GitHub.")) return;
+    try {
+      const data = await api("/workspace/rotate-webhook-secret", { method: "POST", body: "{}" });
+      session.secret = data.webhook_secret;
+      localStorage.setItem(STORE.secret, session.secret);
+      secretBox.value = session.secret;
+      flash("ok", "New webhook secret issued. Update it in GitHub now.");
+    } catch (error) { flash("error", error.message); }
+  }
+  async function saveToken() {
+    try {
+      const data = await api("/workspace", { method: "PATCH", body: JSON.stringify({ github_token: tokenBox.value.trim() || null }) });
+      session.workspace = data;
+      tokenBox.value = "";
+      flash("ok", data.github_token_configured ? "GitHub token saved. ForgePulse can fetch changed files on webhooks." : "GitHub token removed.");
+      tokenState();
+    } catch (error) { flash("error", error.message); }
+  }
+  function tokenState() {
+    const configured = session.workspace && session.workspace.github_token_configured;
+    tokenBox.placeholder = configured ? "Token is set. Paste a new one to replace it, or save an empty field to remove it." : "github_pat_… or ghp_…";
+  }
+  tokenState();
+  stage.replaceChildren(
+    el("p", { class: "kicker" }, ["Connect your GitHub repository"]),
+    el("h2", {}, ["A stranger can finish this in a few minutes."]),
+    el("p", { class: "note" }, ["You already have a workspace. Add a webhook on any GitHub repository you control. No GitHub App review is required."]),
+    el("ol", { class: "steps" }, [
+      el("li", {}, ["Open your repository on GitHub, then go to Settings → Webhooks → Add webhook."]),
+      el("li", {}, ["Set the payload URL to this endpoint, and the content type to application/json."]),
+      el("li", {}, ["Paste the secret below. Choose “Let me select individual events,” enable Pull requests, and add the webhook."]),
+      el("li", {}, ["Optional but recommended: create a fine-grained personal access token with Contents: Read and Pull requests: Read on that repository, then save it here. GitHub’s pull_request webhook does not include changed file names; the token lets ForgePulse fetch them."]),
+      el("li", {}, ["Open a pull request, or click Redeliver on GitHub’s ping. The decision appears under TriageGate history and in the log below."])
+    ]),
+    el("div", { class: "field" }, [el("label", {}, ["Webhook URL"]), el("div", { class: "copyrow" }, [urlBox, el("button", { type: "button", onclick: () => copyInput(urlBox) }, ["Copy"])])]),
+    el("div", { class: "field" }, [el("label", {}, ["Webhook secret"]), el("div", { class: "copyrow" }, [secretBox, el("button", { type: "button", onclick: () => copyInput(secretBox) }, ["Copy"]), el("button", { type: "button", onclick: rotate }, ["Rotate"])])]),
+    el("div", { class: "field" }, [el("label", {}, ["GitHub token (optional, stored encrypted)"]), el("div", { class: "copyrow" }, [tokenBox, el("button", { class: "primary", type: "button", onclick: saveToken }, ["Save token"])])]),
+    el("h3", {}, ["Webhook deliveries"]),
+    events
+  );
+  await loadEvents();
 }
 
-function render() {
+function renderApi() {
+  const tokenBox = el("input", { readOnly: true, "aria-label": "API token", value: session.token || "" });
+  const origin = location.origin;
+  stage.replaceChildren(
+    el("p", { class: "kicker" }, ["API"]),
+    el("h2", {}, ["Your token is a secret. Send it as a bearer token."]),
+    el("p", { class: "note" }, ["This browser saved the token after your workspace was created. If you clear site data, you will need a new workspace. The server only stores a hash of the token."]),
+    el("div", { class: "field" }, [el("label", {}, ["Bearer token"]), el("div", { class: "copyrow" }, [tokenBox, el("button", { type: "button", onclick: () => copyInput(tokenBox) }, ["Copy"])])]),
+    el("pre", {}, [`curl -sS ${origin}/triage/history \\\n  -H "Authorization: Bearer $FORGEPULSE_TOKEN"`]),
+    el("p", { class: "note" }, ["Endpoints: GET /workspace, PATCH /workspace, POST /workspace/rotate-webhook-secret, GET and PUT /policy, POST /triage/pr, GET /triage/history, POST /ci/enqueue, GET /ci/queue, GET /graph, POST and DELETE /graph/edges, GET /graph/impact/{repo}, POST /index/symbol, GET /index/search, GET /webhooks/events, POST /w/{id}/webhooks/github."])
+  );
+}
+
+async function render() {
+  clearFlash();
+  sessionBanner();
   renderNav();
-  if (current === "triage") renderTriage();
-  else if (current === "graph") renderGraph();
-  else if (current === "atlas") renderAtlas();
-  else if (current === "runners") renderRunners();
-  else renderPolicy();
+  if (!session.token) {
+    stage.replaceChildren(el("p", { class: "note" }, ["Starting a sample workspace…"]));
+    return;
+  }
+  if (current === "triage") await renderTriage();
+  else if (current === "graph") await renderGraph();
+  else if (current === "atlas") await renderAtlas();
+  else if (current === "runners") await renderRunners();
+  else if (current === "policy") await renderPolicy();
+  else if (current === "connect") await renderConnect();
+  else renderApi();
 }
 
-render();
+async function boot() {
+  try {
+    const health = await api("/healthz");
+    document.getElementById("health-pill").textContent =
+      (health.storage === "d1" ? "Durable D1 storage" : "Storage: " + health.storage) + " · " + health.version;
+  } catch {
+    document.getElementById("health-pill").textContent = "Health check failed";
+  }
+  const hash = (location.hash || "").replace("#", "");
+  if (MODULES.some((m) => m.id === hash)) current = hash;
+  document.getElementById("connect-jump").addEventListener("click", (e) => {
+    e.preventDefault();
+    current = "connect";
+    history.replaceState(null, "", "#connect");
+    render();
+  });
+  try {
+    if (session.token) {
+      session.workspace = await api("/workspace");
+    } else {
+      const created = await api("/workspaces/guest", { method: "POST", body: "{}" });
+      session.id = created.workspace.id;
+      session.token = created.token;
+      session.secret = created.webhook_secret;
+      session.workspace = { ...created.workspace, webhook_url: created.webhook_url, github_token_configured: false };
+      localStorage.setItem(STORE.id, session.id);
+      localStorage.setItem(STORE.token, session.token);
+      localStorage.setItem(STORE.secret, session.secret);
+    }
+  } catch (error) {
+    if (error.status === 401) {
+      localStorage.removeItem(STORE.token);
+      localStorage.removeItem(STORE.id);
+      session.token = "";
+      try {
+        const created = await api("/workspaces/guest", { method: "POST", body: "{}" });
+        session.id = created.workspace.id;
+        session.token = created.token;
+        session.secret = created.webhook_secret;
+        session.workspace = { ...created.workspace, webhook_url: created.webhook_url, github_token_configured: false };
+        localStorage.setItem(STORE.id, session.id);
+        localStorage.setItem(STORE.token, session.token);
+        localStorage.setItem(STORE.secret, session.secret);
+      } catch (err) {
+        flash("error", err.message);
+      }
+    } else {
+      flash("error", error.message);
+    }
+  }
+  await render();
+}
+
+boot();
 </script>
 </body>
 </html>

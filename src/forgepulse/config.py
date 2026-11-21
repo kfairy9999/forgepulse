@@ -1,8 +1,10 @@
-"""Process settings. Safe defaults fail closed for webhooks."""
+"""Process settings. Safe defaults fail closed for unsigned webhooks."""
 
 from __future__ import annotations
 
+import contextlib
 import os
+import secrets
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,7 +14,6 @@ def _truthy(value: str | None) -> bool:
 
 
 def default_policy_path() -> Path:
-    """Prefer an explicit path, then the repo copy, then the packaged default."""
     env = os.environ.get("FORGEPULSE_POLICY_PATH", "").strip()
     if env:
         return Path(env)
@@ -22,22 +23,37 @@ def default_policy_path() -> Path:
     return Path(__file__).resolve().parent / "data" / "default_policy.yaml"
 
 
+def default_database_path() -> Path:
+    env = os.environ.get("FORGEPULSE_DATABASE", "").strip()
+    if env:
+        return Path(env)
+    data = Path.cwd() / ".data"
+    data.mkdir(exist_ok=True)
+    return data / "forgepulse.sqlite"
+
+
+def resolve_master_key() -> str:
+    env = os.environ.get("FORGEPULSE_MASTER_KEY", "").strip()
+    if env:
+        return env
+    key_file = Path.cwd() / ".data" / "master.key"
+    if key_file.is_file():
+        return key_file.read_text(encoding="utf-8").strip()
+    key_file.parent.mkdir(exist_ok=True)
+    key = secrets.token_hex(32)
+    key_file.write_text(key, encoding="utf-8")
+    with contextlib.suppress(OSError):
+        key_file.chmod(0o600)
+    return key
+
+
 @dataclass(frozen=True)
 class Settings:
-    """Runtime settings.
-
-    ``webhook_secret``: if set, every webhook must carry a valid
-    ``X-Hub-Signature-256`` digest. The unsigned-dev bypass is never applied
-    when a secret is set, including a value of ``dev-secret``.
-
-    ``allow_unsigned``: only honored when no secret is configured. The safe
-    default is false, so a misconfigured deployment rejects unsigned webhooks
-    instead of accepting them.
-    """
-
     webhook_secret: str | None
     allow_unsigned: bool
     policy_path: Path
+    database_path: Path
+    master_key: str
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -46,6 +62,8 @@ class Settings:
             webhook_secret=secret,
             allow_unsigned=_truthy(os.environ.get("FORGEPULSE_ALLOW_UNSIGNED")),
             policy_path=default_policy_path(),
+            database_path=default_database_path(),
+            master_key=resolve_master_key(),
         )
 
     def unsigned_webhooks_allowed(self) -> bool:
