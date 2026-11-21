@@ -86,9 +86,7 @@ def create_app(
     app = FastAPI(
         title="ForgePulse",
         version=__version__,
-        description=(
-            "Durable PR triage, CI routing records, blast radius, and portable policy."
-        ),
+        description=("Durable PR triage, CI routing records, blast radius, and portable policy."),
     )
     app.state.settings = config
     app.state.sqlite = db
