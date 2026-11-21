@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ForgePulse — triage, blast radius, and portable policy</title>
+<meta name="description" content="ForgePulse scores pull requests, reroutes CI when hosted runners fail, measures cross-repo blast radius, and evaluates YAML policy outside GitHub's UI. Prototype. In-memory. Not production.">
+<meta property="og:title" content="ForgePulse — triage, blast radius, and portable policy">
+<meta property="og:description" content="A live playground for PR triage, CI failover, blast radius, and portable policy. Seeded fictional data. In-memory prototype, not production.">
+<meta property="og:url" content="https://forgepulse.kfairley9999.workers.dev">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary">
+<link rel="canonical" href="https://forgepulse.kfairley9999.workers.dev">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --paper: #f3efe4;
+    --ink: #1d1a16;
+    --muted: #5e574c;
+    --rule: #d9d0c0;
+    --add: #e5f2e6;
+    --add-ink: #1d5c32;
+    --del: #f8e4dc;
+    --del-ink: #8d2d16;
+    --stamp: #9d2c14;
+    --pass: #1d5c32;
+    --panel: #fffdf8;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: Palatino, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    min-height: 100vh;
+  }
+  header, .layout, footer {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  header { padding: 28px 32px 8px; }
+  .mark {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-size: 12px;
+    margin: 0 0 8px;
+  }
+  h1 {
+    font-weight: 500;
+    font-size: 28px;
+    line-height: 1.25;
+    margin: 0;
+    max-width: 18em;
+  }
+  .lede {
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1.45;
+    max-width: 38em;
+    margin: 10px 0 0;
+  }
+  .status {
+    display: inline-block;
+    margin: 14px 0 0;
+    border: 1px solid var(--rule);
+    background: var(--panel);
+    padding: 6px 10px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--stamp);
+  }
+  .cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin: 14px 0 0;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 12px;
+  }
+  .cta a, a.inline {
+    color: var(--ink);
+    text-decoration: none;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 1px;
+  }
+  .cta a:hover, a.inline:hover { border-bottom-color: var(--ink); }
+  button:focus-visible, a:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 24px;
+    padding: 20px 32px 48px;
+  }
+  nav { display: flex; flex-direction: column; gap: 6px; }
+  nav button {
+    text-align: left;
+    background: transparent;
+    border: 0;
+    border-left: 3px solid transparent;
+    padding: 8px 10px;
+    font: inherit;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  nav button small {
+    display: block;
+    color: var(--muted);
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 11px;
+    margin-top: 2px;
+  }
+  nav button[aria-current="true"] { border-left-color: var(--stamp); background: #fffaf3; }
+  main { min-width: 0; }
+  #stage {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    min-height: 360px;
+    padding: 20px 22px 24px;
+  }
+  .kicker {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 10px;
+  }
+  h2 { font-weight: 500; font-size: 22px; margin: 0 0 10px; }
+  .note { color: var(--muted); margin: 0 0 16px; line-height: 1.45; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+  .chips button, .run {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px;
+    background: transparent;
+    border: 1px solid var(--rule);
+    padding: 6px 10px;
+    cursor: pointer;
+    color: var(--ink);
+  }
+  .chips button[aria-current="true"] { border-color: var(--ink); background: var(--paper); }
+  .run {
+    background: var(--ink);
+    color: var(--paper);
+    border-color: var(--ink);
+    padding: 8px 14px;
+  }
+  .run:disabled { opacity: 0.35; cursor: default; }
+  .split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  textarea {
+    width: 100%;
+    min-height: 260px;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    color: var(--ink);
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.45;
+    padding: 10px 12px;
+    resize: vertical;
+  }
+  .result {
+    border: 1px solid var(--rule);
+    padding: 12px 14px;
+    min-height: 260px;
+    background: #fffaf3;
+  }
+  .badge {
+    display: inline-block;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    margin: 0 0 10px;
+    border: 1px solid var(--rule);
+  }
+  .badge.fast-track { background: var(--add); color: var(--add-ink); border-color: #cfe3d1; }
+  .badge.standard-review { background: var(--panel); }
+  .badge.quarantine-bot-check { background: #f6e6c8; color: #6a3d08; }
+  .badge.block-policy { background: var(--del); color: var(--del-ink); border-color: #e8c7bb; }
+  .score { font-size: 28px; font-weight: 500; margin: 0 0 4px; }
+  .bar { height: 6px; background: var(--rule); margin: 0 0 14px; }
+  .bar span { display: block; height: 6px; background: var(--stamp); }
+  .reasons, .matches { margin: 0; padding-left: 18px; }
+  .reasons li, .matches li { margin: 0 0 6px; }
+  pre {
+    margin: 0;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  footer {
+    padding: 0 32px 32px;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  @media (max-width: 800px) {
+    .layout { grid-template-columns: 1fr; padding: 12px 16px 32px; }
+    header { padding: 20px 16px 0; }
+    h1 { font-size: 22px; }
+    nav { flex-direction: row; overflow-x: auto; }
+    nav button { min-width: 160px; border-left: 0; border-bottom: 3px solid transparent; }
+    nav button[aria-current="true"] { border-bottom-color: var(--stamp); }
+    .split { grid-template-columns: 1fr; }
+    footer { padding: 0 16px 24px; }
+    textarea, .result { min-height: 200px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <p class="mark">ForgePulse</p>
+  <h1>Triage the pull request. Measure the blast radius. Keep the policy off GitHub.</h1>
+  <p class="lede">Five modules sit next to GitHub, not inside its settings screens: PR signal scoring, CI failover, cross-repo blast radius, symbol search, and portable YAML policy. This page calls a live API on seeded fictional data.</p>
+  <p class="status">Prototype · In-memory state · Not production</p>
+  <p class="cta">
+    <a href="https://github.com/kfairy9999/forgepulse">Source on GitHub</a>
+    <a href="https://github.com/kfairy9999/forgepulse#quickstart">Run it locally</a>
+    <a href="/healthz">Health</a>
+  </p>
+</header>
+<div class="layout">
+  <nav id="modules" aria-label="Modules"></nav>
+  <main>
+    <section id="stage" aria-live="polite"></section>
+  </main>
+</div>
+<footer>
+  Seeded fictional repositories only: payments, auth, billing, and a web app.
+  The queue and index live in memory in this isolate and reset when it sleeps.
+  Webhook signatures fail closed. Policy is loaded from YAML, not from GitHub UI settings.
+</footer>
+<script>
+const MODULES = [
+  { id: "triage", title: "TriageGate", blurb: "Score a pull request" },
+  { id: "graph", title: "GraphSync", blurb: "Downstream blast radius" },
+  { id: "atlas", title: "CodeAtlas", blurb: "Symbol and owner search" },
+  { id: "runners", title: "RunnerMesh", blurb: "Priority queue and failover" },
+  { id: "policy", title: "PolicyVault", blurb: "Portable YAML rules" }
+];
+
+const TRIAGE_CASES = {
+  trusted: {
+    label: "Trusted fix with tests",
+    body: {
+      repo: "org/payments-core",
+      pr_number: 412,
+      author: "ada",
+      author_merged_prs: 12,
+      title: "Fix settlement rounding for weekend batches",
+      body: "Keeps the weekend cutoff from double-rounding cents.",
+      files_changed: 3,
+      lines_added: 36,
+      lines_deleted: 9,
+      has_tests: true,
+      changed_paths: ["src/settlement/engine.py", "tests/test_engine.py"]
+    }
+  },
+  ai: {
+    label: "First-time AI dump",
+    body: {
+      repo: "org/web-app",
+      pr_number: 903,
+      author: "new-hire",
+      author_merged_prs: 0,
+      title: "update code",
+      body: "Generated by Copilot. Rewrites checkout.",
+      files_changed: 18,
+      lines_added: 420,
+      lines_deleted: 80,
+      has_tests: false,
+      ai_assisted: true,
+      changed_paths: ["app/checkout/CheckoutForm.tsx"]
+    }
+  },
+  protected: {
+    label: "Auth change, no tests",
+    body: {
+      repo: "org/auth-gateway",
+      pr_number: 108,
+      author: "guest",
+      author_merged_prs: 1,
+      title: "Tighten session cookie flags",
+      body: "Sets Secure and HttpOnly on the session cookie.",
+      files_changed: 1,
+      lines_added: 14,
+      lines_deleted: 2,
+      has_tests: false,
+      changed_paths: ["pkg/auth/chain.go"],
+      touches_critical_paths: ["pkg/auth/chain.go"]
+    }
+  },
+  unknown: {
+    label: "Webhook with no file list",
+    body: {
+      repo: "org/payments-core",
+      pr_number: 500,
+      author: "ada",
+      author_merged_prs: 8,
+      title: "Refactor settlement weekend cutoff handling",
+      body: "Native GitHub webhooks omit changed file names.",
+      files_changed: 6,
+      lines_added: 200,
+      lines_deleted: 20
+    }
+  }
+};
+
+const GRAPH_REPOS = ["org/shared-types", "org/payments-core", "org/auth-gateway", "org/web-app"];
+const SEARCHES = ["process_settlement", "@sec-team", "CheckoutForm.tsx", "Money"];
+
+const nav = document.getElementById("modules");
+const stage = document.getElementById("stage");
+let current = "triage";
+
+function el(tag, attrs, children) {
+  const node = document.createElement(tag);
+  Object.entries(attrs || {}).forEach(([key, value]) => {
+    if (key === "class") node.className = value;
+    else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+    else if (value === true) node.setAttribute(key, "");
+    else if (value !== false && value != null) node.setAttribute(key, value);
+  });
+  (children || []).forEach((child) => {
+    node.appendChild(typeof child === "string" ? document.createTextNode(child) : child);
+  });
+  return node;
+}
+
+function renderNav() {
+  nav.innerHTML = "";
+  MODULES.forEach((mod) => {
+    nav.appendChild(el("button", {
+      type: "button",
+      "aria-current": mod.id === current ? "true" : "false",
+      onclick: () => { current = mod.id; render(); }
+    }, [mod.title, el("small", {}, [mod.blurb])]));
+  });
+}
+
+async function api(path, options) {
+  const response = await fetch(path, options);
+  const text = await response.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = text; }
+  if (!response.ok) {
+    const err = new Error((data && data.detail) || response.statusText);
+    err.payload = data;
+    throw err;
+  }
+  return data;
+}
+
+function renderTriage() {
+  let selected = "trusted";
+  const editor = el("textarea", { id: "payload", spellcheck: "false", "aria-label": "Pull request JSON" }, [JSON.stringify(TRIAGE_CASES.trusted.body, null, 2)]);
+  const result = el("div", { class: "result", id: "out" }, [el("p", { class: "note" }, ["Pick a case, or edit the JSON, then run TriageGate."])]);
+
+  function applyCase(id) {
+    selected = id;
+    editor.value = JSON.stringify(TRIAGE_CASES[id].body, null, 2);
+    Array.from(stage.querySelectorAll(".chips button")).forEach((btn) => {
+      btn.setAttribute("aria-current", btn.dataset.id === id ? "true" : "false");
+    });
+  }
+
+  async function run() {
+    result.replaceChildren(el("p", { class: "note" }, ["Running…"]));
+    try {
+      const body = JSON.parse(editor.value);
+      const data = await api("/triage/pr", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const reasons = el("ul", { class: "reasons" }, (data.reasons || []).map((reason) => el("li", {}, [reason])));
+      const width = Math.round((data.signal_score || 0) * 100);
+      result.replaceChildren(
+        el("span", { class: "badge " + data.action }, [data.action]),
+        el("p", { class: "score" }, [String(data.signal_score)]),
+        el("div", { class: "bar" }, [el("span", { style: "width:" + width + "%" })]),
+        el("p", { class: "note" }, [
+          (data.has_tests == null ? "Tests unknown" : (data.has_tests ? "Tests present" : "No tests")) +
+          " · " + (data.has_tests_source || "unknown") +
+          " · reviewers " + (data.suggested_reviewers || []).join(", ")
+        ]),
+        reasons
+      );
+    } catch (error) {
+      result.replaceChildren(el("p", { class: "note" }, [error.message || "Request failed"]));
+    }
+  }
+
+  stage.replaceChildren(
+    el("p", { class: "kicker" }, ["TriageGate"]),
+    el("h2", {}, ["Score the signal. Do not guess the file list."]),
+    el("p", { class: "note" }, ["When a webhook omits changed paths, ForgePulse flags test presence as unknown instead of pretending the PR has no tests."]),
+    el("div", { class: "chips" }, Object.entries(TRIAGE_CASES).map(([id, item]) =>
+      el("button", { type: "button", "data-id": id, "aria-current": id === selected ? "true" : "false", onclick: () => applyCase(id) }, [item.label])
+    )),
+    el("p", {}, [el("button", { class: "run", type: "button", onclick: run }, ["Run triage"])]),
+    el("div", { class: "split" }, [editor, result])
+  );
+  run();
+}
+
+function renderGraph() {
+  const result = el("div", { class: "result", id: "out" }, [el("p", { class: "note" }, ["Choose a repository to walk its downstream dependents."])]);
+  async function run(repo) {
+    result.replaceChildren(el("p", { class: "note" }, ["Running…"]));
+    try {
+      const data = await api("/graph/impact/" + repo);
+      const items = (data.downstream_repos || []).map((name, index) => el("li", {}, [(index + 1) + ". " + name]));
+      result.replaceChildren(
+        el("p", { class: "score" }, [String(data.total_impacted)]),
+        el("p", { class: "note" }, ["downstream repositories from " + data.source_repo]),
+        items.length ? el("ul", { class: "reasons" }, items) : el("p", { class: "note" }, ["No downstream dependents."])
+      );
+    } catch (error) {
+      result.replaceChildren(el("p", { class: "note" }, [error.message || "Request failed"]));
+    }
+  }
+  stage.replaceChildren(
+    el("p", { class: "kicker" }, ["GraphSync"]),
+    el("h2", {}, ["A change in shared types does not stay in shared types."]),
+    el("p", { class: "note" }, ["Breadth-first walk of a fictional dependency graph. Cycles are ignored. The source repository is not counted."]),
+    el("div", { class: "chips" }, GRAPH_REPOS.map((repo) => el("button", { type: "button", onclick: () => run(repo) }, [repo]))),
+    result
+  );
+  run("org/shared-types");
+}
+
+function renderAtlas() {
+  const result = el("div", { class: "result" }, [el("p", { class: "note" }, ["Search the seeded index."])]);
+  const input = el("textarea", { spellcheck: "false", "aria-label": "Search query", style: "min-height:80px" }, ["process_settlement"]);
+  async function run(query) {
+    if (query != null) input.value = query;
+    result.replaceChildren(el("p", { class: "note" }, ["Running…"]));
+    try {
+      const data = await api("/index/search?q=" + encodeURIComponent(input.value.trim()));
+      if (!data.matches.length) {
+        result.replaceChildren(el("p", { class: "note" }, ["No symbols matched “" + data.query + "”."]));
+        return;
+      }
+      const rows = data.matches.map((item) => el("tr", {}, [
+        el("td", {}, [item.symbol]),
+        el("td", {}, [item.repo]),
+        el("td", {}, [item.file_path]),
+        el("td", {}, [(item.owners || []).join(", ")]),
+        el("td", {}, ["#" + (item.related_prs || []).join(", #")])
+      ]));
+      result.replaceChildren(
+        el("p", { class: "note" }, [data.count + " match" + (data.count === 1 ? "" : "es")]),
+        el("table", {}, [
+          el("thead", {}, [el("tr", {}, ["Symbol", "Repo", "Path", "Owners", "PRs"].map((h) => el("th", {}, [h])))]),
+          el("tbody", {}, rows)
+        ])
+      );
+    } catch (error) {
+      result.replaceChildren(el("p", { class: "note" }, [error.message || "Request failed"]));
+    }
+  }
+  stage.replaceChildren(
+    el("p", { class: "kicker" }, ["CodeAtlas"]),
+    el("h2", {}, ["Find the symbol, the owner, and the last pull request."]),
+    el("p", { class: "note" }, ["The index is seeded with fictional payments, auth, and checkout symbols. Search is case-insensitive."]),
+    el("div", { class: "chips" }, SEARCHES.map((query) => el("button", { type: "button", onclick: () => run(query) }, [query]))),
+    el("p", {}, [input, " ", el("button", { class: "run", type: "button", onclick: () => run() }, ["Search"])]),
+    result
+  );
+  run("process_settlement");
+}
+
+function renderRunners() {
+  const editor = el("textarea", { spellcheck: "false", "aria-label": "CI job JSON" }, [JSON.stringify({
+    job_id: "payments-core-ci",
+    repo: "org/payments-core",
+    branch: "fix/weekend-cutoff",
+    priority: 85,
+    preferred_pool: "ephemeral-cloud",
+    github_hosted_healthy: false
+  }, null, 2)]);
+  const result = el("div", { class: "result" }, [el("p", { class: "note" }, ["Enqueue a job, then inspect the in-memory queue."])]);
+  async function enqueue() {
+    result.replaceChildren(el("p", { class: "note" }, ["Running…"]));
+    try {
+      const body = JSON.parse(editor.value);
+      await api("/ci/enqueue", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      await showQueue();
+    } catch (error) {
+      result.replaceChildren(el("p", { class: "note" }, [error.message || "Request failed"]));
+    }
+  }
+  async function showQueue() {
+    const data = await api("/ci/queue");
+    if (!data.jobs.length) {
+      result.replaceChildren(el("p", { class: "note" }, ["Queue is empty. Depth 0."]));
+      return;
+    }
+    const rows = data.jobs.map((job) => el("tr", {}, [
+      el("td", {}, [String(job.priority)]),
+      el("td", {}, [String(job.enqueue_seq)]),
+      el("td", {}, [job.job_id]),
+      el("td", {}, [job.routed_pool]),
+      el("td", {}, [job.route_reason])
+    ]));
+    result.replaceChildren(
+      el("p", { class: "note" }, ["Depth " + data.queue_depth + ". Sorted by priority, then a monotonic sequence — not by timestamp strings."]),
+      el("table", {}, [
+        el("thead", {}, [el("tr", {}, ["Priority", "Seq", "Job", "Pool", "Reason"].map((h) => el("th", {}, [h])))]),
+        el("tbody", {}, rows)
+      ])
+    );
+  }
+  stage.replaceChildren(
+    el("p", { class: "kicker" }, ["RunnerMesh"]),
+    el("h2", {}, ["If hosted runners are degraded, the job still has a pool."]),
+    el("p", { class: "note" }, ["This queue lives in memory in the current Worker isolate. It is a demonstration, not a dispatcher."]),
+    el("p", {}, [
+      el("button", { class: "run", type: "button", onclick: enqueue }, ["Enqueue job"]),
+      " ",
+      el("button", { type: "button", class: "chips", onclick: showQueue, style: "padding:8px 14px;border:1px solid var(--rule);background:transparent;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;cursor:pointer" }, ["Show queue"])
+    ]),
+    el("div", { class: "split" }, [editor, result])
+  );
+  showQueue();
+}
+
+async function renderPolicy() {
+  stage.replaceChildren(
+    el("p", { class: "kicker" }, ["PolicyVault"]),
+    el("h2", {}, ["Rules live in YAML, not in a GitHub settings screen."]),
+    el("p", { class: "note" }, ["Loading the active policy…"])
+  );
+  try {
+    const data = await api("/policy");
+    stage.replaceChildren(
+      el("p", { class: "kicker" }, ["PolicyVault"]),
+      el("h2", {}, ["Rules live in YAML, not in a GitHub settings screen."]),
+      el("p", { class: "note" }, ["The default org policy is version-controlled. Large changes without tests are flagged. Protected paths without tests are blocked. Unverified AI PRs from first-time authors go to quarantine."]),
+      el("div", { class: "result" }, [el("pre", {}, [JSON.stringify(data, null, 2)])])
+    );
+  } catch (error) {
+    stage.replaceChildren(el("p", { class: "note" }, [error.message || "Request failed"]));
+  }
+}
+
+function render() {
+  renderNav();
+  if (current === "triage") renderTriage();
+  else if (current === "graph") renderGraph();
+  else if (current === "atlas") renderAtlas();
+  else if (current === "runners") renderRunners();
+  else renderPolicy();
+}
+
+render();
+</script>
+</body>
+</html>

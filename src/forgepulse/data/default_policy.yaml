@@ -1,0 +1,12 @@
+rule_id: default-org-policy
+require_tests_above_lines: 150
+protected_paths:
+  - infra/
+  - auth/
+  - billing/
+allow_unverified_ai_prs: false
+default_reviewers:
+  - "@maintainers"
+protected_reviewers:
+  - "@sec-team"
+  - "@staff-eng"

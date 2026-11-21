@@ -1,0 +1,14 @@
+.venv
+.git
+.github
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.coverage
+htmlcov
+dist
+*.egg-info
+node_modules
+.wrangler
+tests
+docs

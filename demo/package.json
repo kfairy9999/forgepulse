@@ -1,0 +1,13 @@
+{
+  "name": "forgepulse-demo",
+  "private": true,
+  "description": "Cloudflare Workers playground for ForgePulse. In-memory prototype. No paid bindings.",
+  "scripts": {
+    "build": "node build.mjs",
+    "dry-run": "node build.mjs && wrangler deploy --dry-run",
+    "deploy": "node build.mjs && wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.50.0"
+  }
+}
